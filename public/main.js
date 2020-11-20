@@ -5,7 +5,11 @@ const inputRoomNumber = document.getElementById('roomNumber');
 let localVideo = document.getElementById('localVideo');
 let remoteVideo = document.getElementById('remoteVideo');
 
-let roomNumber, localStream, remoteStream, rtcPeerConnection, isCaller;
+let inputCallName = document.getElementById('inputCallName');
+let buttonSetName = document.getElementById('buttonSetName');
+let headingCallName = document.getElementById('callName');
+
+let roomNumber, localStream, remoteStream, rtcPeerConnection, isCaller, dataChannel;
 
 const iceServers = {
   'iceServer': [
@@ -32,6 +36,15 @@ buttonGoRoom.onclick = async function() {
   }
 }
 
+buttonSetName.onclick = async function () {
+  if (!inputCallName.value) {
+    alert('please enter call name');
+  } else {
+    dataChannel.send(inputCallName.value);
+    headingCallName.innerText = inputCallName.value;
+  }
+}
+
 socket.on('created', async function (room) {
   localStream = await navigator.mediaDevices.getUserMedia(streamConstraints);
   localVideo.srcObject = localStream;
@@ -51,6 +64,7 @@ socket.on('ready', async function (room) {
     rtcPeerConnection.ontrack = onAddStream;
     rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream);
     rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream);
+    dataChannel = rtcPeerConnection.createDataChannel(roomNumber);
     const sdp = await rtcPeerConnection.createOffer();
     rtcPeerConnection.setLocalDescription(sdp);
     socket.emit('offer', {
@@ -58,6 +72,9 @@ socket.on('ready', async function (room) {
       sdp: sdp,
       room: roomNumber,
     });
+
+    
+    dataChannel.onmessage = event => { headingCallName.innerText = event.data };
   }
 });
 
@@ -70,6 +87,10 @@ socket.on('offer', async function (event) {
     rtcPeerConnection.addTrack(localStream.getTracks()[0], localStream);
     rtcPeerConnection.addTrack(localStream.getTracks()[1], localStream);
     rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event));
+    rtcPeerConnection.ondatachannel = event => {
+      dataChannel = event.channel;
+      dataChannel.onmessage = event => { headingCallName.innerText = event.data };
+    };
     const sdp = await rtcPeerConnection.createAnswer();
     rtcPeerConnection.setLocalDescription(sdp);
     socket.emit('answer', {
@@ -77,6 +98,7 @@ socket.on('offer', async function (event) {
       sdp: sdp,
       room: roomNumber,
     });
+
   }
 });
 
